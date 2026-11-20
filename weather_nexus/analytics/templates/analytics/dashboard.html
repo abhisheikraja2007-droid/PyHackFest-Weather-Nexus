@@ -1,0 +1,861 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>🇮🇳 India Weather & AQI Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" />
+  <script src="https://cdn.plot.ly/plotly-2.29.1.min.js"></script>
+  <style>
+    /* ────────── RESET & ROOT ────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:       #0d0d1a;
+      --surface:  rgba(255,255,255,0.04);
+      --border:   rgba(255,255,255,0.09);
+      --accent:   #4facfe;
+      --accent2:  #00f2fe;
+      --text:     #dde1f0;
+      --muted:    #7e8fa6;
+      --good:     #00e400; --satisfactory:#92d050; --moderate:#ffff00;
+      --poor:     #ff7e00; --verypoor:#ff0000;    --severe:#7e0023;
+    }
+
+    body {
+      font-family: 'Outfit', sans-serif;
+      background: radial-gradient(ellipse at top, #1a1a2e 0%, #0d0d1a 70%);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* ────────── SIDEBAR ────────── */
+    .app { display: flex; }
+    .sidebar {
+      width: 280px; min-height: 100vh; flex-shrink: 0;
+      background: rgba(255,255,255,0.03);
+      border-right: 1px solid var(--border);
+      padding: 28px 20px;
+      position: sticky; top: 0;
+      display: flex; flex-direction: column; gap: 18px;
+    }
+    .sidebar-logo { width: 100px; border-radius: 6px; display: block; margin: 0 auto 8px; }
+    .sidebar h2 { font-size: 1.1rem; color: var(--accent); font-weight: 600; }
+    .sidebar label { display: block; font-size: 0.78rem; color: var(--muted); margin-bottom: 4px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; }
+    .sidebar select, .sidebar input[type=range] {
+      width: 100%; background: rgba(255,255,255,0.06); border: 1px solid var(--border);
+      border-radius: 8px; color: var(--text); padding: 8px 12px; font-family: inherit; font-size: 0.9rem; outline: none;
+    }
+    .sidebar select option {
+      background: #1a1a36; /* Dark background for dropdown */
+      color: #fff;        /* White text for visibility */
+    }
+    .sidebar select:focus { border-color: var(--accent); }
+    .check-group {
+      max-height: 180px; overflow-y: auto; background: rgba(255,255,255,0.04);
+      padding: 10px; border-radius: 8px; border: 1px solid var(--border);
+      margin-top: 6px;
+    }
+    .check-item {
+      display: flex; align-items: center; gap: 10px; margin-bottom: 8px;
+      font-size: 0.85rem; cursor: pointer; color: var(--text);
+    }
+    .check-item:hover { color: var(--accent); }
+    .check-item input { accent-color: var(--accent); width: 15px; height: 15px; cursor: pointer; }
+    .range-row { display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--muted); }
+
+    /* ────────── MAIN ────────── */
+    .main { flex: 1; padding: 32px 36px; max-width: 1400px; }
+
+    /* ────────── HERO ────────── */
+    .hero { text-align: center; padding-bottom: 28px; }
+    .hero h1 { font-size: 2.4rem; font-weight: 700; background: linear-gradient(90deg, var(--accent), var(--accent2)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+    .hero p  { color: var(--muted); margin-top: 6px; font-size: 1rem; }
+
+    /* ────────── KPI STRIP ────────── */
+    .kpi-strip { display: grid; grid-template-columns: repeat(4,1fr); gap: 16px; margin-bottom: 32px; }
+    .kpi {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+      padding: 18px 22px; transition: transform .2s;
+    }
+    .kpi:hover { transform: translateY(-4px); }
+    .kpi .val  { font-size: 1.9rem; font-weight: 700; color: var(--accent); }
+    .kpi .lbl  { font-size: 0.78rem; color: var(--muted); margin-top: 4px; text-transform: uppercase; letter-spacing: .06em; }
+
+    /* ────────── TABS ────────── */
+    .tab-bar { display: flex; gap: 8px; margin-bottom: 28px; border-bottom: 1px solid var(--border); padding-bottom: 0; }
+    .tab-btn {
+      background: none; border: none; color: var(--muted); font-family: inherit;
+      font-size: 0.95rem; font-weight: 600; padding: 10px 22px; cursor: pointer;
+      border-bottom: 3px solid transparent; transition: all .2s;
+    }
+    .tab-btn:hover  { color: var(--text); }
+    .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; }
+
+    /* ────────── ANALYSIS BLOCK ────────── */
+    .analysis-block { margin-bottom: 40px; }
+    .analysis-block h3 { font-size: 1.05rem; font-weight: 600; margin-bottom: 14px; color: #c5cae9; }
+    .split { display: grid; grid-template-columns: 1.8fr 1fr; gap: 20px; align-items: start; }
+
+    .chart-box {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+      padding: 6px; overflow: hidden;
+    }
+
+    .explain-box {
+      background: rgba(0,0,0,0.22); border-left: 3px solid var(--accent);
+      border-radius: 0 12px 12px 0; padding: 22px 20px;
+      font-size: 0.92rem; line-height: 1.72; color: var(--text);
+    }
+    .explain-box b  { color: var(--accent2); }
+    .explain-box ul { padding-left: 18px; margin-top: 8px; }
+    .explain-box li { margin-bottom: 6px; color: var(--muted); }
+
+    /* ────────── DIVIDER ────────── */
+    hr { border: none; border-top: 1px solid var(--border); margin: 10px 0 30px; }
+
+    /* ────────── FOOTER ────────── */
+    footer { text-align: center; color: var(--muted); font-size: 0.8rem; padding: 24px 0 16px; }
+
+    /* ────────── SPINNER ────────── */
+    .spinner { text-align:center; padding: 60px; color: var(--muted); font-size: 1rem; }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ═════════ SIDEBAR ═════════ -->
+  <aside class="sidebar">
+    <img class="sidebar-logo"
+         src="https://upload.wikimedia.org/wikipedia/en/thumb/4/41/Flag_of_India.svg/320px-Flag_of_India.svg.png"
+         alt="India Flag" />
+    <h2>🎛️ Controls</h2>
+
+    <div id="filter-city">
+      <label>📍 Global Focus City</label>
+      <select id="selGlobalCity" onchange="applyFilters()"></select>
+    </div>
+    <div id="filter-years">
+      <label>📅 Time Period (Year Range)</label>
+      <div style="display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; margin-top:5px;">
+        <select id="selYearStart" onchange="applyFilters()"></select>
+        <span style="color:var(--muted); font-size:0.8rem;">to</span>
+        <select id="selYearEnd" onchange="applyFilters()"></select>
+      </div>
+    </div>
+    <div id="filter-regions">
+      <hr/>
+      <label>🗺️ Filter by Regions</label>
+      <div id="checkRegions" class="check-group">
+        <!-- populated by JS -->
+      </div>
+    </div>
+
+    <div style="margin-top:20px; font-size:0.8rem; color:var(--muted); font-style:italic;">
+      ⚡ Changes apply automatically
+    </div>
+  </aside>
+
+  <!-- ═════════ MAIN ═════════ -->
+  <main class="main">
+    <!-- Hero -->
+    <div class="hero">
+      <h1>🇮🇳 India Weather &amp; Air Quality Insights</h1>
+      <p>Interactive analysis across Indian cities — powered by Django &amp; MongoDB</p>
+    </div>
+
+    <!-- KPIs (populated by JS) -->
+    <div class="kpi-strip" id="kpiStrip">
+      <div class="kpi"><div class="val" id="headerCities">—</div><div class="lbl">🏙️ Cities Monitored</div></div>
+      <div class="kpi"><div class="val" id="headerTemp">—</div><div class="lbl">🌡️ Avg Temperature</div></div>
+      <div class="kpi"><div class="val" id="headerPm">—</div><div class="lbl">🌫️ Avg PM2.5</div></div>
+      <div class="kpi"><div class="val" id="headerHum">—</div><div class="lbl">💧 Avg Humidity</div></div>
+    </div>
+
+    <!-- TAB BAR -->
+    <div class="tab-bar">
+      <button class="tab-btn active" onclick="switchTab('tab1',this)">🕒 AQI Trends</button>
+      <button class="tab-btn"        onclick="switchTab('tab2',this)">🧪 Pollutant Analysis</button>
+      <button class="tab-btn"        onclick="switchTab('tab3',this)">🌤️ Weather Synopsis</button>
+      <button class="tab-btn"        onclick="switchTab('tab4',this)">📉 Regional Deepdive</button>
+    </div>
+
+    <!-- ════ TAB 1: AQI TRENDS ════ -->
+    <div id="tab1" class="tab-pane active">
+
+      <div class="analysis-block">
+        <h3>1. Historical AQI Timeline</h3>
+        <div class="split">
+          <div class="chart-box"><div id="chartAqiTs"></div></div>
+          <div class="explain-box">
+            <h4>📊 Scientific Insights</h4>
+            <div id="reportAqi" class="report-box" style="margin:12px 0; padding:10px; background:rgba(79,172,254,0.1); border-radius:8px; font-weight:600; color:var(--accent);"> Loading... </div>
+            <p style="margin-top:15px; font-size:0.85rem; color:var(--muted);">
+              <b>Note:</b> The dashed line identifies the <b>7-day Rolling Average (SMA)</b> to reveal deep seasonal signals. The dotted line is a <b>Statistical Forecast</b> projection.
+            </p>
+          </div>
+        </div>
+      </div>
+      <hr/>
+
+      <div class="analysis-block">
+        <h3>2. Monthly Seasonal Trends</h3>
+        <div class="split">
+          <div class="chart-box"><div id="chartMonthly"></div></div>
+          <div class="explain-box">
+            <b>Analysis: Seasonal Patterns</b>
+            <ul>
+              <li>Aggregates all daily readings into 12 monthly averages.</li>
+              <li>Winter months (Nov–Jan) commonly show worst pollution due to temperature inversion trapping particulates.</li>
+              <li>Monsoon months (Jun–Sep) typically show a dip as rain washes the air clean.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      <hr/>
+
+      <div class="analysis-block">
+        <h3>3. Year × Month AQI Heatmap</h3>
+        <div class="split">
+          <div class="chart-box"><div id="chartHeat"></div></div>
+          <div class="explain-box">
+            <b>Analysis: Intensity Distribution</b>
+            <ul>
+              <li>Each cell = mean AQI for that month and year combination.</li>
+              <li>Red zones highlight years with sustained high pollution.</li>
+              <li>Identifies whether the city is improving or worsening over the years.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════ TAB 2: POLLUTANTS ════ -->
+    <div id="tab2" class="tab-pane">
+
+      <div class="analysis-block">
+        <h3>1. Dominant Pollutants</h3>
+        <div class="split">
+          <div class="chart-box"><div id="chartPollBar"></div></div>
+          <div class="explain-box">
+            <b>Analysis: Concentration Volume</b>
+            <div id="reportPoll" style="margin:12px 0; padding:10px; background:rgba(79,172,254,0.1); border-radius:8px; font-weight:600; color:var(--accent2);">
+              🧪 Loading chemical analysis...
+            </div>
+            <ul>
+              <li>Mean concentration of each pollutant averaged over all recorded days.</li>
+              <li>PM2.5 &amp; PM10 are the leading contributors to high AQI in Indian cities.</li>
+              <li>CO is typically elevated in traffic-heavy metros.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      <hr/>
+
+      <div class="analysis-block">
+        <h3>2. Pollutant Synergies (Correlation Heatmap)</h3>
+        <div class="split">
+          <div class="chart-box"><div id="chartCorrHeat" style="height:400px;"></div></div>
+          <div class="explain-box">
+            <b>Analysis: Pearson Correlation Matrix</b>
+            <p>Reveals hidden relationships between pollutants. A high correlation (red) between PM2.5 and CO typically signals <b>vehicular combustion</b> as the primary source.</p>
+          </div>
+        </div>
+      </div>
+      <hr/>
+
+      <div class="analysis-block">
+        <h3>3. PM2.5 Variance & Categorical Health Risk</h3>
+        <div class="split">
+          <div class="chart-box">
+            <div style="display:flex; height:400px;">
+              <div id="chartPollBox" style="width:50%; border-right:1px solid var(--border);"></div>
+              <div id="chartRiskBar" style="width:50%;"></div>
+            </div>
+          </div>
+          <div class="explain-box">
+            <b>Analysis: Distribution & Safety</b>
+            <p>The <b>Box Plot</b> (left) analyzes extremes—outliers represent lethal winter spikes. The <b>Stacked Bar</b> (right) preserves the ordinal health sequence better than a pie chart.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════ TAB 3: WEATHER SYNOPSIS ════ -->
+    <div id="tab3" class="tab-pane">
+
+      <div class="analysis-block">
+        <h3>1. Hyperlocal Environment Array</h3>
+        <div class="split">
+          <div class="chart-box">
+             <div class="kpi-grid" style="display:grid; grid-template-columns: repeat(2, 1fr); padding:20px; height:100%; gap:20px;">
+                <div class="kpi" style="background:rgba(79, 172, 254, 0.1); border-color:var(--accent);">
+                    <div id="tabKpiTemp" class="val">--°C</div>
+                    <div class="lbl">Current Temp</div>
+                </div>
+                <div class="kpi" style="background:rgba(246, 211, 101, 0.1); border-color:#f6d365;">
+                    <div id="tabKpiHum" class="val">--%</div>
+                    <div class="lbl">Humidity Level</div>
+                </div>
+                <div class="kpi" style="background:rgba(255, 107, 107, 0.1); border-color:#ff6b6b;">
+                    <div id="tabKpiPm25" class="val">--</div>
+                    <div class="lbl">PM 2.5 Density</div>
+                </div>
+                <div class="kpi" style="background:rgba(0, 201, 167, 0.1); border-color:#00c9a7;">
+                    <div id="kpiWind" class="val">--kmh</div>
+                    <div class="lbl">Wind Velocity</div>
+                </div>
+             </div>
+          </div>
+          <div class="explain-box">
+            <b>Analysis: Instant Situational Metrics</b>
+            <div id="reportWeather" class="report-box">Loading...</div>
+            <p style="margin-top:10px; font-size:0.85rem;">High-density KPI tiles replace space-wasting gauges for elite technical clarity.</p>
+          </div>
+        </div>
+      </div>
+      <hr/>
+
+      <div class="analysis-block">
+        <h3>2. Snapshot Pollutant Mix</h3>
+        <div class="split">
+          <div class="chart-box"><div id="chartChem"></div></div>
+          <div class="explain-box">
+            <b>Analysis: Atmospheric Chemical Balance</b>
+            <ul>
+              <li>Current-day gaseous composition of the atmosphere.</li>
+              <li>Elevated NO₂ signals heavy traffic congestion.</li>
+              <li>SO₂ spikes indicate nearby industrial emissions.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      <hr/>
+
+      <div class="analysis-block">
+        <h3>3. City vs Regional Benchmark</h3>
+        <div class="split">
+          <div class="chart-box"><div id="chartComp"></div></div>
+          <div class="explain-box">
+            <b>Analysis: Regional Deviance</b>
+            <ul>
+              <li>Compares the selected city against every other city in its region.</li>
+              <li>Higher PM2.5 than the region average signals a local pollution hotspot.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════ TAB 4: REGIONAL DEEPDIVE ════ -->
+    <div id="tab4" class="tab-pane">
+
+      <div class="analysis-block">
+        <h3>1. Regional Macro Climate Metrics</h3>
+        <div class="split">
+          <div class="chart-box"><div id="chartMacro"></div></div>
+          <div class="explain-box">
+            <b>Analysis: Macro Climatology</b>
+            <div id="reportReg" style="margin:12px 0; padding:10px; background:rgba(79,172,254,0.1); border-radius:8px; font-weight:600; color:var(--accent2);">
+              🗺️ Comparing macro climates...
+            </div>
+            <ul>
+              <li>Cross-section of India's climate across selected regions.</li>
+              <li>Coastal regions (e.g. Tamil Nadu, Kerala) show high humidity.</li>
+              <li>Inland plains (e.g. Rajasthan) show high temperature variability.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      <hr/>
+
+      <div class="analysis-block">
+        <h3>2. Geospatial Hotspot Map (Northern India)</h3>
+        <div class="chart-box">
+          <div id="chartMap" style="height:550px;"></div>
+        </div>
+        <p style="margin-top:10px; color:var(--muted); font-size:0.85rem;">Spatial clustering of AQI density across North Indian regions, highlighting critical zones using Mapbox.</p>
+      </div>
+      <hr/>
+
+      <div class="analysis-block">
+        <h3>3. National Pollution Ranking (Top 10)</h3>
+        <div class="split">
+          <div class="chart-box"><div id="chartTop10"></div></div>
+          <div class="explain-box">
+            <b>Analysis: Historical Pollution Rank</b>
+            <ul>
+              <li>Cities ranked by their mean AQI over the entire recorded span.</li>
+              <li>High-ranking cities face structural challenges: geography, density, or industry.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════ NEW: GLOBAL DETAILED REPORT ════ -->
+    <div style="margin-top: 60px; background: rgba(79,172,254,0.05); border: 2px solid var(--accent); border-radius: 20px; padding: 40px;">
+      <h2 style="font-size: 1.8rem; color: var(--accent2); margin-bottom: 20px;">🕵️ Detailed Problem Analysis</h2>
+      <div id="globalDetailedReport" style="line-height: 1.8; color: var(--text); font-size: 1.1rem;">
+        <div class="spinner">⚙️ Synthesizing cross-domain data for an in-depth report...</div>
+      </div>
+    </div>
+
+    <footer>
+      🇮🇳 India Weather &amp; AQI Dashboard &nbsp;|&nbsp;
+      Django + MongoDB + Plotly.js &nbsp;|&nbsp; PyHackFest 2024
+    </footer>
+  </main>
+</div><!-- /app -->
+
+<!-- Django context data island (avoids IDE JS lint on template tags) -->
+<script id="djData" type="application/json">
+{"aqi_cities": {{ aqi_cities|safe }}, "w_cities": {{ w_cities|safe }}, "regions": {{ regions|safe }}, "default_city": "{{ default_city }}", "default_wcity": "{{ default_wcity }}", "year_min": {{ year_min }}, "year_max": {{ year_max }}}
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     JAVASCRIPT
+═══════════════════════════════════════════════════════════════════════ -->
+<script>
+/* ── Plotly base layout ── */
+const DARK = {
+  paper_bgcolor: 'rgba(0,0,0,0)',
+  plot_bgcolor:  '#12122a',
+  font: { family: 'Outfit, sans-serif', color: '#dde1f0', size: 12 },
+  margin: { l: 50, r: 30, t: 40, b: 50 },
+  colorway: ['#4facfe','#f6d365','#ff6b6b','#00c9a7','#f093fb','#51cf66'],
+  xaxis: { gridcolor: '#1e2040' },
+  yaxis: { gridcolor: '#1e2040' },
+};
+
+function layout(extra) { return Object.assign({}, DARK, extra); }
+const CFG = { responsive: true, displayModeBar: false };
+
+/* ── Populate sidebar selects (read from data island) ── */
+const _DJ = JSON.parse(document.getElementById('djData').textContent);
+const AQI_CITIES   = _DJ.aqi_cities;
+const W_CITIES     = _DJ.w_cities;
+const REGIONS      = _DJ.regions;
+const DEFAULT_CITY  = _DJ.default_city;
+const DEFAULT_WCITY = _DJ.default_wcity;
+
+function populateSel(id, items, defaultVal) {
+  const sel = document.getElementById(id);
+  sel.innerHTML = '';
+  items.forEach(c => {
+    const o = document.createElement('option');
+    o.value = o.text = c;
+    if (+c === +defaultVal) o.selected = true;
+    sel.appendChild(o);
+  });
+}
+
+function populateChecks(id, items, preselectCount=0) {
+  const cont = document.getElementById(id);
+  cont.innerHTML = '';
+  items.forEach((v, i) => {
+    const lbl = document.createElement('label');
+    lbl.className = 'check-item';
+    lbl.innerHTML = `<input type="checkbox" value="${v}" ${i < preselectCount ? 'checked' : ''} onchange="applyFilters()"> ${v}`;
+    cont.appendChild(lbl);
+  });
+}
+
+const YEARS = Array.from({length: _DJ.year_max - _DJ.year_min + 1}, (_, i) => i + _DJ.year_min);
+
+populateSel('selGlobalCity', AQI_CITIES, DEFAULT_CITY);
+populateSel('selYearStart',  YEARS,      _DJ.year_min);
+populateSel('selYearEnd',    YEARS,      _DJ.year_max);
+populateChecks('checkRegions', REGIONS, 5);
+
+/* ── Tab switching ── */
+function switchTab(id, btn) {
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  btn.classList.add('active');
+
+  // Sidebar Intelligence
+  const citySect = document.getElementById('filter-city');
+  const yearSect = document.getElementById('filter-years');
+  const regSect  = document.getElementById('filter-regions');
+
+  if (id === 'tab1') {
+    citySect.style.display = 'block';
+    yearSect.style.display = 'block';
+    regSect.style.display  = 'none';
+  } else if (id === 'tab2' || id === 'tab3') {
+    citySect.style.display = 'block';
+    yearSect.style.display = 'none';
+    regSect.style.display  = 'none';
+  } else if (id === 'tab4') {
+    citySect.style.display = 'none';
+    yearSect.style.display = 'none';
+    regSect.style.display  = 'block';
+  }
+
+  // Trigger resize to fix potentially hidden chart layout issues
+  const chartId = id === 'tab1' ? 'chartAqiTs' : id === 'tab2' ? 'chartPollCorr' : id === 'tab3' ? 'chartComp' : 'chartMacro';
+  Plotly.relayout(chartId, {});
+}
+
+/* ── Fetch helpers ── */
+async function fetchJSON(url) {
+  const r = await fetch(url);
+  return r.json();
+}
+
+/* ── KPI bootstrap via weather/regional API ── */
+async function loadKPIs() {
+  const city = document.getElementById('selGlobalCity').value;
+  const d = await fetchJSON(`/api/weather/?city=${encodeURIComponent(city)}`);
+  
+  const setV = (id, val, unit='') => {
+     const el = document.getElementById(id);
+     if (el) el.textContent = (val !== null && val !== undefined) ? val + unit : '—';
+  };
+
+  // Header
+  setV('headerCities', AQI_CITIES.length);
+  setV('headerTemp',   d.gauges?.temp, '°C');
+  setV('headerHum',    d.gauges?.humidity, '%');
+  setV('headerPm',     d.gauges?.pm2_5);
+
+  // Tab 3
+  setV('tabKpiTemp',   d.gauges?.temp, '°C');
+  setV('tabKpiHum',    d.gauges?.humidity, '%');
+  setV('tabKpiPm25',   d.gauges?.pm2_5);
+  setV('tabKpiWind',   d.gauges?.wind, ' kmh');
+}
+
+/* ══════════════════════════════════════════════════════
+   TAB 1 — AQI TRENDS
+══════════════════════════════════════════════════════ */
+async function loadAqiTrends() {
+  const city = document.getElementById('selGlobalCity').value;
+  const y1   = +document.getElementById('selYearStart').value;
+  const y2   = +document.getElementById('selYearEnd').value;
+  const d    = await fetchJSON(`/api/aqi/?city=${encodeURIComponent(city)}&y1=${Math.min(y1,y2)}&y2=${Math.max(y1,y2)}`);
+  window.lastAqi = d;
+
+  const AQI_COLOR = {
+    'Good':'#00e400','Satisfactory':'#92d050','Moderate':'#ffff00',
+    'Poor':'#ff7e00','Very Poor':'#ff0000','Severe':'#7e0023'
+  };
+  const buckets = [...new Set(d.ts.map(r=>r.bucket))];
+
+  /* Chart 1: time-series + SMA + Forecast + WHO Line */
+  const traces1 = buckets.map(b => ({
+    type:'scatter', mode:'markers', name: b,
+    x: d.ts.filter(r=>r.bucket===b).map(r=>r.date),
+    y: d.ts.filter(r=>r.bucket===b).map(r=>r.aqi),
+    marker:{ color: AQI_COLOR[b]||'#888', size:4, opacity:.5 },
+  }));
+
+  // 7-day Rolling SMA
+  if (d.sma && d.sma.length) {
+    traces1.push({
+      type:'scatter', mode:'lines', name:'7d Moving Avg',
+      x: d.ts.map(r=>r.date), y: d.sma,
+      line:{ color:'#4facfe', width:2, dash:'dash' },
+      opacity:.8
+    });
+  }
+
+  // Statistical Forecast
+  if (d.forecast && d.forecast.length) {
+    const lastDate = d.ts[d.ts.length-1].date;
+    const fDates = d.forecast.map((_,i) => {
+        let dc = new Date(lastDate);
+        dc.setDate(dc.getDate() + i + 1);
+        return dc.toISOString().split('T')[0];
+    });
+    traces1.push({
+      type:'scatter', mode:'lines', name:'7d Forecast',
+      x: fDates, y: d.forecast,
+      line:{ color:'#00f2fe', width:2, dash:'dot' }
+    });
+  }
+
+  Plotly.newPlot('chartAqiTs', traces1, layout({
+    title:{ text:`AQI Evolution: ${city}`, font:{size:14} },
+    xaxis:{ rangeslider:{visible:true} },
+    yaxis:{ title:'AQI' },
+    shapes: [{
+      type: 'line', yref: 'y', y0: 50, y1: 50, x0: 0, x1: 1, xref: 'paper',
+      line: { color: '#ff4b2b', width: 1, dash: 'dash' }
+    }]
+  }), CFG);
+
+  /* Chart 2: monthly bar */
+  const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  Plotly.newPlot('chartMonthly', [{
+    type:'bar', x: d.monthly.map(r=>MONTHS[r.month-1]), y: d.monthly.map(r=>r.avg_aqi),
+    marker:{ color: d.monthly.map(r=>r.avg_aqi), colorscale:'YlOrRd' },
+  }], layout({ title:'Seasonal Seasonality', height:380 }), CFG);
+
+  /* Chart 3: heatmap */
+  const years  = [...new Set(d.heat.map(r=>r.year))].sort();
+  if (years.length === 0) {
+    document.getElementById('chartHeat').innerHTML = '<div class="spinner">No heatmap data for this range</div>';
+  } else {
+    const zMatrix = MONTHS.map((_, mi) =>
+      years.map(yr => {
+        const hit = d.heat.find(r => r.year === yr && r.month === (mi + 1));
+        return hit ? hit.avg_aqi : null;
+      })
+    );
+    Plotly.newPlot('chartHeat', [{
+      type: 'heatmap', z: zMatrix, x: years, y: MONTHS, 
+      colorscale: 'RdYlGn', reversescale: true, zmin: 0, zmax: 400,
+      connectgaps: true
+    }], layout({ title: 'Year × Month Density', height: 380 }), CFG);
+  }
+
+  /* Update Report */
+  const r = d.report;
+  document.getElementById('reportAqi').innerHTML = `
+    🔥 <b>EXPERT INSIGHTS:</b><br/>
+    Span average is <b>${r.avg || '—'}</b>. Trend is <b>${r.trend_label || '—'}</b>.
+    WHO Threshold (50) was breached during <b>${r.who_who_breach_pct || 0}%</b> of the observation span.
+  `;
+}
+
+/* ══════════════════════════════════════════════════════
+   TAB 2 — POLLUTANTS
+══════════════════════════════════════════════════════ */
+async function loadPollutants() {
+  const city = document.getElementById('selGlobalCity').value;
+  const d = await fetchJSON(`/api/pollutants/?city=${encodeURIComponent(city)}`);
+  window.lastPoll = d;
+
+  /* Chart 0: Dominant Pollutants Bar */
+  try {
+      const meanKeys = Object.keys(d.means || {});
+      const meanVals = Object.values(d.means || {});
+      if (meanKeys.length === 0) {
+        document.getElementById('chartPollBar').innerHTML = '<div class="spinner">No pollutant data</div>';
+      } else {
+        Plotly.newPlot('chartPollBar', [{
+          type: 'bar', x: meanKeys, y: meanVals,
+          marker: { color: meanVals, colorscale: 'YlOrRd', showscale: false },
+          text: meanVals.map(v => v.toFixed(1)), textposition: 'auto'
+        }], layout({ title: 'Mean Concentrations', height: 400 }), CFG);
+      }
+  } catch (e) {
+      console.error("PollBar Error:", e);
+      document.getElementById('chartPollBar').innerHTML = `<div style="color:red">Error: ${e.message}</div>`;
+  }
+
+
+  /* Chart 1: Heatmap Correlation */
+  try {
+      const corrKeys = Object.keys(d.corr || {});
+      if (corrKeys.length === 0) {
+        document.getElementById('chartCorrHeat').innerHTML = '<div class="spinner">Insufficient data for correlation</div>';
+      } else {
+        const corrZ = corrKeys.map(k1 => corrKeys.map(k2 => d.corr[k1][k2] || 0));
+        Plotly.newPlot('chartCorrHeat', [{
+          type:'heatmap', z:corrZ, x:corrKeys, y:corrKeys, colorscale:'RdBu', reversescale:true, zmin:-1, zmax:1
+        }], layout({ title:'Pollutant Synergy Matrix', height:380 }), CFG);
+      }
+  } catch (e) {
+      console.error("CorrHeat Error:", e);
+      document.getElementById('chartCorrHeat').innerHTML = `<div style="color:red">Error: ${e.message}</div>`;
+  }
+
+  /* Chart 2: PM2.5 Box Plot & Stacked Risk Bar */
+  try {
+      if (d.box && d.box.max !== undefined) {
+        Plotly.newPlot('chartPollBox', [{
+          type: 'box', y: [d.box.min, d.box.q1, d.box.med, d.box.q3, d.box.max],
+          name: 'PM2.5 Distribution', marker:{color:'#4facfe'}
+        }], layout({ title:'Winter Variance', height:400, showlegend:false }), CFG);
+      }
+  } catch(e) {
+      console.error("PollBox Error:", e);
+      document.getElementById('chartPollBox').innerHTML = `<div style="color:red">Error: ${e.message}</div>`;
+  }
+
+  try {
+      const riskColors = {
+        'Good':'#00e400','Satisfactory':'#92d050','Moderate':'#ffff00',
+        'Poor':'#ff7e00','Very Poor':'#ff0000','Severe':'#7e0023'
+      };
+      const riskTraces = (d.buckets || []).map(b => ({
+        type:'bar', orientation:'h', name:b.bucket,
+        x:[b.count], y:['AQI History'], marker:{color:riskColors[b.bucket] || '#888'}
+      }));
+      if (riskTraces.length) {
+        Plotly.newPlot('chartRiskBar', riskTraces, layout({
+          title:'Ordinal Health Sequence', height:400, barmode:'stack', showlegend:false,
+          xaxis:{visible:false}, yaxis:{visible:false}
+        }), CFG);
+      }
+  } catch(e) {
+      console.error("RiskBar Error:", e);
+      document.getElementById('chartRiskBar').innerHTML = `<div style="color:red">Error: ${e.message}</div>`;
+  }
+
+  try {
+      document.getElementById('reportPoll').innerHTML = `
+        🧪 <b>CHEMICAL AUDIT:</b> Dominant pollutant is <b>${d.report.top_pollutant}</b>. 
+        Health risk breach frequency: <b>${d.report.risk_pct}%</b>.
+      `;
+  } catch(e) {
+      console.error("Report Error:", e);
+  }
+}
+
+async function loadWeather() {
+  const city = document.getElementById('selGlobalCity').value;
+  const d = await fetchJSON(`/api/weather/?city=${encodeURIComponent(city)}`);
+  window.lastWeather = d;
+
+  if (!d.gauges) return;
+  
+  // Tab 3 text updates (using new safe IDs)
+  const setV = (id, val, unit='') => {
+     const el = document.getElementById(id);
+     if (el) el.textContent = (val !== null && val !== undefined) ? val + unit : '—';
+  };
+  setV('tabKpiTemp',   d.gauges.temp, '°C');
+  setV('tabKpiHum',    d.gauges.humidity, '%');
+  setV('tabKpiPm25',   d.gauges.pm2_5);
+  setV('tabKpiWind',   d.gauges.wind, ' kmh');
+
+  /* Chart 2: chem bar */
+  const chemK = Object.keys(d.chem || {});
+  const chemV = Object.values(d.chem || {});
+  if (chemK.length) {
+    Plotly.newPlot('chartChem', [{
+      type:'bar', x:chemK, y:chemV,
+      marker:{ color:chemV, colorscale:'Plasma', showscale:true, colorbar:{title:'Level'} },
+      text: chemV.map(v=>`${v}`), textposition:'outside',
+    }], layout({ title:'Current Chemical Composition', height:380,
+                 xaxis:{ gridcolor:'#1e2040' },
+                 yaxis:{ title:'Concentration', gridcolor:'#1e2040' } }), CFG);
+  }
+
+  /* Chart 3: city vs region avg */
+  const cmp = d.comparison;
+  if (cmp && cmp.metrics) {
+    Plotly.newPlot('chartComp', [
+      { type:'bar', name:city, x:cmp.metrics, y:cmp.city, marker:{color:'#4facfe'} },
+      { type:'bar', name:`${cmp.region_name} Avg`, x:cmp.metrics, y:cmp.region_avg, marker:{color:'#ff6b6b'} },
+    ], layout({ barmode:'group', title:`${city} vs Regional Average`, height:380,
+                yaxis:{ gridcolor:'#1e2040' }, xaxis:{ gridcolor:'#1e2040' } }), CFG);
+  }
+
+  /* Update Report */
+  const r = d.report;
+  document.getElementById('reportWeather').innerHTML = `
+    🌤️ <b>WEATHER BENCHMARK:</b><br/>
+    Currently, ${city} has a PM2.5 level that is <b>${r.pm_diff} μg/m³ ${r.verdict}</b> 
+    than the average for the <b>${r.region}</b> region. 
+    Current climate: <b>${d.gauges.condition}</b>.
+  `;
+}
+
+async function loadRegional() {
+  const regions = Array.from(document.querySelectorAll('#checkRegions input:checked')).map(i=>i.value);
+  if (!regions.length) return;
+  const params  = regions.map(r=>`regions=${encodeURIComponent(r)}`).join('&');
+  const d = await fetchJSON(`/api/regional/?${params}`);
+  window.lastReg = d;
+
+  /* Chart 1: Regional Macro Metrics */
+  Plotly.newPlot('chartMacro', [
+    { type:'bar', name:'Avg Temp (°C)',    x:d.macro.map(r=>r.region), y:d.macro.map(r=>r.avg_temp),     marker:{color:'#f6d365'} },
+    { type:'bar', name:'Avg Humidity (%)', x:d.macro.map(r=>r.region), y:d.macro.map(r=>r.avg_humidity), marker:{color:'#4facfe'} },
+    { type:'bar', name:'Avg PM2.5',        x:d.macro.map(r=>r.region), y:d.macro.map(r=>r.avg_pm25),     marker:{color:'#ff6b6b'} },
+  ], layout({ barmode:'group', title:'Regional Climatology Breakdown', height:420 }), CFG);
+
+  /* NEW Chart 2: Northern India Mapbox Hotspots */
+  const mapTraces = [{
+    type: 'scattermapbox',
+    lat: d.map_data.map(r=>r.lat),
+    lon: d.map_data.map(r=>r.lon),
+    mode: 'markers',
+    marker: {
+      size: d.map_data.map(r=>Math.min(20, 8 + (r.pm25/15))),
+      color: d.map_data.map(r=>r.pm25),
+      colorscale: 'YlOrRd', showscale: true,
+      colorbar: { title: 'PM2.5', thickness: 15, len: 0.5, font:{color:'#eee'} }
+    },
+    text: d.map_data.map(r=>`${r.city}<br>PM2.5: ${r.pm25}<br>${r.condition}`),
+    hoverinfo: 'text'
+  }];
+  Plotly.newPlot('chartMap', mapTraces, layout({
+    mapbox: { style:'carto-darkmatter', center:{lat:28.6, lon:77.2}, zoom:4.5 },
+    title: { text:'Northern India Pollution Hotspots', font:{color:'#eee'} },
+    margin: { t:50, b:0, l:0, r:0 }, height:550
+  }), CFG);
+
+  /* Chart 3: Top 10 polluted */
+  const t = [...d.top10].sort((a,b)=>b.avg_aqi-a.avg_aqi);
+  Plotly.newPlot('chartTop10', [{
+    type:'bar', orientation:'h',
+    y: t.map(r=>r.city).reverse(), x: t.map(r=>r.avg_aqi).reverse(),
+    marker:{ color:t.map(r=>r.avg_aqi).reverse(), colorscale:'Hot', reversescale:true },
+    text: t.map(r=>r.avg_aqi.toFixed(0)).reverse(), textposition:'outside'
+  }], layout({ title:'Historical National Rankings', height:420 }), CFG);
+
+  /* Update Report */
+  const r = d.report;
+  document.getElementById('reportReg').innerHTML = `
+    ⚖️ <b>REGIONAL BENCHMARK:</b><br/>
+    Analyzed <b>${r.count}</b> monitoring clusters. The <b>${r.most_polluted}</b> region exhibits the highest mean intensity.
+  `;
+}
+
+async function applyFilters() {
+  document.getElementById('globalDetailedReport').innerHTML = '<div class="spinner">⚙️ Synthesizing cross-domain data...</div>';
+  try {
+      await Promise.all([loadAqiTrends(), loadPollutants(), loadWeather(), loadRegional(), loadKPIs()]);
+      synthesizeGlobalReport();
+  } catch (e) {
+      document.getElementById('globalDetailedReport').innerHTML = `<div style="color:red; font-size:20px; font-weight:bold;">FATAL UI ERROR: ${e.message}<br>${e.stack}</div>`;
+      console.error(e);
+  }
+}
+window.onerror = function(msg, url, lineNo, columnNo, error) {
+  document.body.insertAdjacentHTML("afterbegin", `<div style="background:red; color:white; padding:10px; font-weight:bold;">GLOBAL ERROR: ${msg}</div>`);
+  return false;
+};
+
+function synthesizeGlobalReport() {
+  if (!window.lastAqi || !window.lastPoll || !window.lastWeather || !window.lastReg) return;
+  const a = window.lastAqi.report;
+  const p = window.lastPoll.report;
+  const w = window.lastWeather.report;
+  const r = window.lastReg.report;
+  const city = document.getElementById('selGlobalCity').value;
+
+  document.getElementById('globalDetailedReport').innerHTML = `
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:30px;">
+      <div style="background:rgba(255,255,255,0.03); padding:20px; border-radius:12px; border-left:4px solid var(--accent);">
+        <h4 style="color:var(--accent); margin-bottom:10px;">📉 Trend & Risk Profile</h4>
+        <p><b>${city}</b> shows an <b>${a.trend_label}</b> trend. WHO Threshold breach: <b>${a.who_who_breach_pct}%</b> days. 
+        Predominant chemical threat: <b>${p.top_pollutant}</b>.</p>
+      </div>
+      <div style="background:rgba(255,255,255,0.03); padding:20px; border-radius:12px; border-left:4px solid var(--accent2);">
+        <h4 style="color:var(--accent2); margin-bottom:10px;">🌤️ Weather & Regional</h4>
+        <p>Local PM2.5 deviation: <b>${w.pm_diff} μg/m³</b>. Regional hotspot leader: <b>${r.most_polluted}</b>.</p>
+      </div>
+    </div>
+    <div style="margin-top:20px; padding:20px; background:rgba(255,255,255,0.05); border-radius:12px; border:1px dashed var(--border);">
+      <h4 style="color:#f6d365; margin-bottom:10px;">💡 Strategic Recommendation</h4>
+      <p>Data-driven focus on <b>${p.top_pollutant === 'CO' ? 'Urban Mobility Control' : p.top_pollutant === 'SO2' ? 'Industrial Desulfurization' : 'Particulate Abatement'}</b> is essential.</p>
+    </div>
+  `;
+}
+
+// Initial load on page ready
+document.addEventListener('DOMContentLoaded', applyFilters);
+</script>
+</body>
+</html>
